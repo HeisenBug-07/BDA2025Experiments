@@ -6,11 +6,13 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from speechbrain.pretrained import EncoderClassifier
 from tqdm import tqdm
+import librosa
+import torchaudio.transforms as transforms
 
 # -------------------------
-# Dataset Class (Unchanged)
+# Dataset Class (Modified to use librosa)
 # -------------------------
-class FeatureDataset(Dataset):
+class RawAudioDataset(Dataset):
     def __init__(self, txt_file, root_dir=""):
         self.root_dir = root_dir
         self.samples = []
@@ -18,24 +20,36 @@ class FeatureDataset(Dataset):
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 2:
-                    feat_path = parts[0]
+                    audio_path = parts[0]
                     label = int(parts[1])
-                    self.samples.append((feat_path, label))
-    
+                    self.samples.append((audio_path, label))
+
     def __len__(self):
         return len(self.samples)
-    
+
     def __getitem__(self, idx):
-        feat_path, label = self.samples[idx]
-        feat = np.load(os.path.join(self.root_dir, feat_path))
-        return torch.tensor(feat, dtype=torch.float32), torch.tensor(label, dtype=torch.long)
+        audio_path, label = self.samples[idx]
+        audio_path = os.path.join(self.root_dir, audio_path)
+
+        # Load audio using librosa
+        waveform, sr = librosa.load(audio_path, sr=16000)  # resample to 16kHz if needed
+
+        # Compute log-Mel spectrogram
+        mel_spec = librosa.feature.melspectrogram(y=waveform, sr=sr, n_mels=60, fmax=8000)
+        log_mel_spec = librosa.power_to_db(mel_spec, ref=np.max)
+
+        
+        # Convert to tensor and normalize
+        mel_spec_tensor = torch.tensor(log_mel_spec, dtype=torch.float32)
+
+        return mel_spec_tensor, torch.tensor(label, dtype=torch.long)
 
 # -------------------------
 # Collate Function (Unchanged)
 # -------------------------
 def collate_fn(batch, fixed_time_dim=1500):
     features, labels = zip(*batch)
-    padded_features = torch.zeros(len(features), 392, fixed_time_dim)
+    padded_features = torch.zeros(len(features), 60, fixed_time_dim)
     adjusted_lengths = []
     for i, f in enumerate(features):
         time_length = f.shape[1]
@@ -48,7 +62,7 @@ def collate_fn(batch, fixed_time_dim=1500):
     return padded_features, torch.stack(labels), torch.tensor(adjusted_lengths)
 
 # -------------------------
-# Modified Model with Debugging
+# Modified Model
 # -------------------------
 class CustomECAPA(nn.Module):
     def __init__(self, classifier, num_classes, freeze_encoder_except_last_n=4):
@@ -57,8 +71,8 @@ class CustomECAPA(nn.Module):
         self.encoder = classifier.mods.embedding_model
         self.mean_var_norm = classifier.mods.mean_var_norm
         
-        # Conv1d projection (392 -> 60 channels)
-        self.projection = nn.Conv1d(392, 60, kernel_size=1)
+        # Conv1d projection (60 -> 60 channels)
+        self.projection = nn.Conv1d(60, 60, kernel_size=1)
         
         # Final classifier
         self.classifier = nn.Linear(256, num_classes)
@@ -74,7 +88,7 @@ class CustomECAPA(nn.Module):
                 param.requires_grad = False
 
     def forward(self, x, lengths=None):
-        # Input shape: (batch, 392, time)
+        # Input shape: (batch, 60, time)
         
         # 1. Channel projection
         x = self.projection(x)
@@ -100,11 +114,11 @@ class CustomECAPA(nn.Module):
 # -------------------------
 def main():
     # Initialize datasets
-    train_dataset = FeatureDataset("train_phone_md.txt")
-    valid_dataset = FeatureDataset("test_phone_md.txt")
+    train_dataset = RawAudioDataset("train_all_raw_md.txt")
+    valid_dataset = RawAudioDataset("test_all_raw_md.txt")
     
     # Create dataloaders
-    batch_size = 32
+    batch_size = 16
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -179,8 +193,8 @@ def main():
         val_acc = correct / total
         print(f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.4f}")
         
-        # Save checkpoint
-        torch.save(model.state_dict(), f"ecapa_phonemd_{val_acc:.2f}_{epoch+1}.pth")
+        # Save checkpoint after all epochs
+        torch.save(model.state_dict(), f"ecapa_raw_{val_acc}_{epoch+1}.pth")
 
 if __name__ == "__main__":
     main()
