@@ -11,7 +11,6 @@ This document provides a detailed overview of the experiments conducted in the s
 - [Experiment 3: Proposal of Phonotactic Feature-based Models](#experiment-3-proposal-of-phonotactic-feature-based-models)
 - [Experiment 4: Comparison of Models](#experiment-4-comparison-of-models)
 - [Summary of Results](#summary-of-results)
-- [References](#references)
 
 ---
 
