@@ -10,7 +10,6 @@ This document provides a detailed overview of the experiments conducted in the s
 - [Experiment 2: Fine-tuning of Off-the-shelf Pretrained Models](#experiment-2-fine-tuning-of-off-the-shelf-pretrained-models)
 - [Experiment 3: Proposal of Phonotactic Feature-based Models](#experiment-3-proposal-of-phonotactic-feature-based-models)
 - [Experiment 4: Comparison of Models](#experiment-4-comparison-of-models)
-- [Experiment 5: Visualizing Language Clusters (t-SNE Analysis)](#experiment-5-visualizing-language-clusters-t-sne-analysis)
 - [Summary of Results](#summary-of-results)
 - [References](#references)
 
